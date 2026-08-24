@@ -47,4 +47,21 @@ jobs:
         run: xcodegen generate
       - name: Compile without signing
         run: |
-          xcodebuild             -project CareerPilot.xcodeproj             -scheme CareerPilot             -configuration Debug             -destination 'platform=macOS'             CODE_SIGNING_ALLOWED=NO             build
+          xcodebuild \
+            -project CareerPilot.xcodeproj \
+            -scheme CareerPilot \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/CareerPilotDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+      - name: Verify embedded Safari extension
+        run: |
+          APP_PATH="$RUNNER_TEMP/CareerPilotDerivedData/Build/Products/Debug/CareerPilot.app"
+          EXTENSION_PATH="$APP_PATH/Contents/PlugIns/CareerPilotExtension.appex"
+
+          test -d "$EXTENSION_PATH"
+          test -f "$EXTENSION_PATH/Contents/Resources/manifest.json"
+
+          POINT_IDENTIFIER="$(plutil -extract NSExtension.NSExtensionPointIdentifier raw -o - "$EXTENSION_PATH/Contents/Info.plist")"
+          test "$POINT_IDENTIFIER" = "com.apple.Safari.web-extension"
