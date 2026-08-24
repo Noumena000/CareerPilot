@@ -1,0 +1,14 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+CareerPilot.xcodeproj/
+.env
+.env.*
+!.env.example
+*.resume.*
+*.cover-letter.*
+CandidateData/
+ApplicationData/
