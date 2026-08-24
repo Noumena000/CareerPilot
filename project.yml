@@ -1,0 +1,53 @@
+name: CareerPilot
+options:
+  bundleIdPrefix: com.noumena
+  deploymentTarget:
+    macOS: "14.0"
+packages:
+  CareerPilotCore:
+    path: .
+targets:
+  CareerPilot:
+    type: application
+    platform: macOS
+    sources:
+      - App
+    dependencies:
+      - target: CareerPilotExtension
+        embed: true
+        codeSign: true
+        copy:
+          destination: plugins
+      - package: CareerPilotCore
+        product: CareerPilotCore
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: CareerPilot
+        LSApplicationCategoryType: public.app-category.productivity
+        LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        NSPrincipalClass: NSApplication
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.noumena.CareerPilot
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: App/CareerPilot.entitlements
+  CareerPilotExtension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: SafariExtension/Native
+      - path: SafariExtension/Resources
+        buildPhase: resources
+    info:
+      path: SafariExtension/Native/Info.plist
+      properties:
+        CFBundleDisplayName: CareerPilot
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.Safari.web-extension
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).SafariWebExtensionHandler"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.noumena.CareerPilot.Extension
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: SafariExtension/Native/CareerPilotExtension.entitlements
