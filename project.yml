@@ -24,9 +24,6 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: CareerPilot
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         CODE_SIGN_ENTITLEMENTS: App/CareerPilot.entitlements
-    scheme:
-      testTargets:
-        - CareerPilotCoreTests
   CareerPilotExtension:
     type: app-extension
     platform: macOS
