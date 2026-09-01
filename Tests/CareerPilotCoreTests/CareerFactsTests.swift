@@ -52,6 +52,49 @@ final class CareerFactsTests: XCTestCase {
         XCTAssertEqual(profile.verifiedValue(for: .city), "New City")
     }
 
+    func testUnchangedImportedFactKeepsItsVerificationState() {
+        var profile = CareerProfile()
+        profile.setFact(
+            .linkedInURL,
+            value: "https://www.linkedin.com/in/example",
+            source: .imported,
+            verification: .unverified
+        )
+
+        let edited = profile.applyingUserEdits([
+            .linkedInURL: "https://www.linkedin.com/in/example"
+        ])
+
+        XCTAssertEqual(edited.fact(for: .linkedInURL)?.source, .imported)
+        XCTAssertEqual(edited.fact(for: .linkedInURL)?.verification, .unverified)
+        XCTAssertNil(edited.verifiedValue(for: .linkedInURL))
+    }
+
+    func testChangedImportedFactBecomesUserVerified() {
+        var profile = CareerProfile()
+        profile.setFact(
+            .city,
+            value: "Old City",
+            source: .imported,
+            verification: .unverified
+        )
+
+        let edited = profile.applyingUserEdits([.city: "New City"])
+
+        XCTAssertEqual(edited.fact(for: .city)?.source, .userEntered)
+        XCTAssertEqual(edited.fact(for: .city)?.verification, .verified)
+        XCTAssertEqual(edited.verifiedValue(for: .city), "New City")
+    }
+
+    func testClearingUserEditRemovesFact() {
+        var profile = CareerProfile()
+        profile.setFact(.phone, value: "555-0100", verification: .verified)
+
+        let edited = profile.applyingUserEdits([.phone: "   "])
+
+        XCTAssertNil(edited.fact(for: .phone))
+    }
+
     func testJSONStoreRoundTripsProfile() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
