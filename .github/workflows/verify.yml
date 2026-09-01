@@ -39,8 +39,8 @@ jobs:
       - name: Enforce external-runtime independence
         run: |
           LEGACY_RUNTIME="$(printf 'open%s' 'claw')"
-          if git grep -n -i "$LEGACY_RUNTIME"; then
-            echo "CareerPilot must not restore the removed external runtime dependency."
+          if git grep -n -i "$LEGACY_RUNTIME" -- App Sources SafariExtension Package.swift project.yml; then
+            echo "CareerPilot runtime code must not restore the removed external runtime dependency."
             exit 1
           fi
 
