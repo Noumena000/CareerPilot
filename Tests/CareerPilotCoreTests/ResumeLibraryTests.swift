@@ -24,4 +24,13 @@ final class ResumeLibraryTests: XCTestCase {
         XCTAssertFalse(ResumeFilePolicy.isAllowed(filename: "resume.pages"))
         XCTAssertFalse(ResumeFilePolicy.isAllowed(filename: "script.js"))
     }
+
+    func testStoredResumeFilenameMustStayInsideLibraryAndMatchRecordID() {
+        let id = UUID()
+        XCTAssertTrue(ResumeFilePolicy.isSafeStoredFilename("\(id.uuidString).pdf", for: id))
+        XCTAssertTrue(ResumeFilePolicy.isSafeStoredFilename("\(id.uuidString).DOCX", for: id))
+        XCTAssertFalse(ResumeFilePolicy.isSafeStoredFilename("../\(id.uuidString).pdf", for: id))
+        XCTAssertFalse(ResumeFilePolicy.isSafeStoredFilename("other-id.pdf", for: id))
+        XCTAssertFalse(ResumeFilePolicy.isSafeStoredFilename("\(id.uuidString).pages", for: id))
+    }
 }
