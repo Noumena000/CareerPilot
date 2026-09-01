@@ -2,14 +2,14 @@ import Foundation
 
 public struct InspectedBrowserField: Codable, Equatable, Sendable {
     public let descriptor: BrowserFieldDescriptor
-    public let target: BrowserTargetIdentity
+    public let target: BrowserControlTarget
     public let currentValue: String
     public let isDisabled: Bool
     public let isReadOnly: Bool
 
     public init(
         descriptor: BrowserFieldDescriptor,
-        target: BrowserTargetIdentity,
+        target: BrowserControlTarget,
         currentValue: String = "",
         isDisabled: Bool = false,
         isReadOnly: Bool = false
