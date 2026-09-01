@@ -20,19 +20,44 @@ public struct BrowserFieldDescriptor: Codable, Equatable, Sendable {
     public let name: String
     public let type: String
     public let autocomplete: String?
+    public let elementID: String?
+    public let placeholder: String?
+    public let ariaLabel: String?
+    public let nearbyText: String?
 
     public init(
         reference: String,
         label: String,
         name: String = "",
         type: String = "text",
-        autocomplete: String? = nil
+        autocomplete: String? = nil,
+        elementID: String? = nil,
+        placeholder: String? = nil,
+        ariaLabel: String? = nil,
+        nearbyText: String? = nil
     ) {
         self.reference = reference
         self.label = label
         self.name = name
         self.type = type
         self.autocomplete = autocomplete
+        self.elementID = elementID
+        self.placeholder = placeholder
+        self.ariaLabel = ariaLabel
+        self.nearbyText = nearbyText
+    }
+
+    public var matchingText: String {
+        [
+            label,
+            name,
+            elementID ?? "",
+            placeholder ?? "",
+            ariaLabel ?? "",
+            nearbyText ?? ""
+        ]
+        .joined(separator: " ")
+        .lowercased()
     }
 }
 
@@ -64,7 +89,11 @@ public enum FieldPolicy {
             field.label,
             field.name,
             field.type,
-            field.autocomplete ?? ""
+            field.autocomplete ?? "",
+            field.elementID ?? "",
+            field.placeholder ?? "",
+            field.ariaLabel ?? "",
+            field.nearbyText ?? ""
         ]
         .joined(separator: " ")
         .lowercased()
