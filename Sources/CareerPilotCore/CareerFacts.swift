@@ -84,6 +84,36 @@ public struct CareerProfile: Codable, Equatable, Sendable {
         return nil
     }
 
+    public func applyingUserEdits(
+        _ edits: [CanonicalCareerField: String],
+        updatedAt: Date = Date()
+    ) -> CareerProfile {
+        var result = self
+
+        for (field, rawValue) in edits {
+            let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard !normalized.isEmpty else {
+                result.removeFact(for: field)
+                continue
+            }
+
+            if let existing = result.fact(for: field), existing.normalizedValue == normalized {
+                continue
+            }
+
+            result.setFact(
+                field,
+                value: normalized,
+                source: .userEntered,
+                verification: .verified,
+                updatedAt: updatedAt
+            )
+        }
+
+        return result
+    }
+
     public mutating func setFact(
         _ field: CanonicalCareerField,
         value: String,
