@@ -13,7 +13,9 @@ final class ApplicationBrowserModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var inspectedFields: [InspectedBrowserField] = []
     @Published var proposals: [RoutineFillProposal] = []
+    @Published var fillResults: [FillAttemptResult] = []
     @Published var isInspecting = false
+    @Published var isFilling = false
 
     fileprivate weak var webView: WKWebView?
     fileprivate var pageIdentity: BrowserPageIdentity?
@@ -42,6 +44,7 @@ final class ApplicationBrowserModel: ObservableObject {
         defer { isInspecting = false }
         let page = BrowserPageIdentity(url: currentURL.absoluteString)
         pageIdentity = page
+        fillResults = []
         do {
             let raw = try await webView.evaluateJavaScript(Self.inspectionScript)
             guard let rows = raw as? [[String: Any]] else { throw InspectionError.invalidResult }
@@ -75,6 +78,67 @@ final class ApplicationBrowserModel: ObservableObject {
         }
     }
 
+    func fillSafeProposals() async {
+        guard let webView, let currentURL, let pageIdentity, !proposals.isEmpty else { return }
+        guard ApplicationURLPolicy.permitsAutomaticDisclosure(to: currentURL) else {
+            errorMessage = "CareerPilot will not disclose CareerFacts to an insecure application page."
+            return
+        }
+
+        isFilling = true
+        fillResults = []
+        defer { isFilling = false }
+
+        for proposal in proposals {
+            guard FillExecutionPolicy.permitsAttempt(proposal, currentPage: pageIdentity, currentURL: currentURL) else {
+                fillResults.append(FillAttemptResult(
+                    proposalID: proposal.id,
+                    canonicalField: proposal.canonicalField,
+                    status: .staleTarget,
+                    message: "Skipped because the application page changed after inspection."
+                ))
+                continue
+            }
+
+            do {
+                let result = try await executeFill(proposal, in: webView)
+                fillResults.append(result)
+            } catch {
+                fillResults.append(FillAttemptResult(
+                    proposalID: proposal.id,
+                    canonicalField: proposal.canonicalField,
+                    status: .writeFailed,
+                    message: error.localizedDescription
+                ))
+            }
+        }
+    }
+
+    private func executeFill(_ proposal: RoutineFillProposal, in webView: WKWebView) async throws -> FillAttemptResult {
+        let descriptor = proposal.inspectedField.descriptor
+        let payload: [String: Any] = [
+            "reference": proposal.inspectedField.target.reference,
+            "expectedName": descriptor.name,
+            "expectedID": descriptor.elementID ?? "",
+            "expectedType": descriptor.type.lowercased(),
+            "value": proposal.proposedValue
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        guard let json = String(data: data, encoding: .utf8) else { throw FillError.invalidPayload }
+        let raw = try await webView.evaluateJavaScript(Self.fillScript(payloadJSON: json))
+        guard let row = raw as? [String: Any],
+              let statusRaw = row["status"] as? String,
+              let status = FillAttemptStatus(rawValue: statusRaw),
+              let message = row["message"] as? String else { throw FillError.invalidResult }
+        return FillAttemptResult(
+            proposalID: proposal.id,
+            canonicalField: proposal.canonicalField,
+            status: status,
+            readbackValue: row["readbackValue"] as? String,
+            message: message
+        )
+    }
+
     fileprivate func synchronize(from webView: WKWebView) {
         self.webView = webView
         let previousURL = currentURL
@@ -88,7 +152,12 @@ final class ApplicationBrowserModel: ObservableObject {
         canGoForward = webView.canGoForward
     }
 
-    fileprivate func clearInspection() { inspectedFields = []; proposals = []; pageIdentity = nil }
+    fileprivate func clearInspection() {
+        inspectedFields = []
+        proposals = []
+        fillResults = []
+        pageIdentity = nil
+    }
 
     private static func careerFactsStore() -> JSONCareerFactsStore {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -99,6 +168,17 @@ final class ApplicationBrowserModel: ObservableObject {
     private enum InspectionError: LocalizedError {
         case invalidResult
         var errorDescription: String? { "The page returned an unexpected inspection result." }
+    }
+
+    private enum FillError: LocalizedError {
+        case invalidPayload
+        case invalidResult
+        var errorDescription: String? {
+            switch self {
+            case .invalidPayload: return "CareerPilot could not encode the approved field value."
+            case .invalidResult: return "The page returned an unexpected fill result."
+            }
+        }
     }
 
     private static let inspectionScript = #"""
@@ -128,6 +208,58 @@ final class ApplicationBrowserModel: ObservableObject {
       });
     })();
     """#
+
+    private static func fillScript(payloadJSON: String) -> String {
+        #"""
+        (() => {
+          const p = \#(payloadJSON);
+          const result = (status, message, readbackValue = null) => ({ status, message, readbackValue });
+          const el = document.querySelector(`[data-careerpilot-ref="${CSS.escape(p.reference)}"]`);
+          if (!el) return result('targetMissing', 'The inspected control no longer exists.');
+
+          const actualName = el.getAttribute('name') || '';
+          const actualID = el.id || '';
+          const actualType = (el.getAttribute('type') || el.tagName || 'text').toLowerCase();
+          if (actualName !== p.expectedName || actualID !== p.expectedID || actualType !== p.expectedType) {
+            return result('targetMismatch', 'The control changed after inspection.');
+          }
+          if (el.disabled || el.readOnly) return result('writeFailed', 'The control became disabled or read-only.');
+          if (typeof el.value === 'string' && el.value.trim() !== '') {
+            return result('existingValuePreserved', 'A value was entered after inspection, so CareerPilot left it unchanged.', el.value);
+          }
+
+          const tag = el.tagName.toLowerCase();
+          const allowedInputTypes = new Set(['text', 'email', 'tel', 'url', 'search']);
+          try {
+            let desired = p.value;
+            if (tag === 'select') {
+              const option = Array.from(el.options).find(o => o.value === desired)
+                || Array.from(el.options).find(o => (o.textContent || '').trim().toLowerCase() === desired.trim().toLowerCase());
+              if (!option) return result('unsupportedControl', 'No select option matched the verified CareerFact.');
+              desired = option.value;
+              el.value = desired;
+            } else if (tag === 'textarea') {
+              const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+              setter ? setter.call(el, desired) : (el.value = desired);
+            } else if (tag === 'input' && allowedInputTypes.has(actualType)) {
+              const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+              setter ? setter.call(el, desired) : (el.value = desired);
+            } else {
+              return result('unsupportedControl', `CareerPilot does not write this ${actualType} control automatically.`);
+            }
+
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            el.dispatchEvent(new Event('blur', { bubbles: false }));
+            const readback = typeof el.value === 'string' ? el.value : '';
+            if (readback !== desired) return result('readbackFailed', 'The page did not retain the value after the write.', readback);
+            return result('verified', 'Value written and verified by readback.', readback);
+          } catch (error) {
+            return result('writeFailed', error && error.message ? error.message : 'The page rejected the write.');
+          }
+        })();
+        """#
+    }
 }
 
 struct ApplicationWebView: NSViewRepresentable {
@@ -194,7 +326,7 @@ struct ApplicationWorkspaceView: View {
             } else {
                 HSplitView {
                     ApplicationWebView(model: model).frame(minWidth: 520)
-                    if !model.inspectedFields.isEmpty { inspectionPanel.frame(minWidth: 280, idealWidth: 340, maxWidth: 420) }
+                    if !model.inspectedFields.isEmpty { inspectionPanel.frame(minWidth: 300, idealWidth: 360, maxWidth: 440) }
                 }
             }
         }.navigationTitle(model.pageTitle)
@@ -213,11 +345,20 @@ struct ApplicationWorkspaceView: View {
                         Text(proposal.inspectedField.descriptor.label.isEmpty ? proposal.canonicalField.rawValue : proposal.inspectedField.descriptor.label).font(.callout).bold()
                         Text(proposal.proposedValue).textSelection(.enabled)
                         Text(proposal.evidence).font(.caption).foregroundStyle(.secondary)
+                        if let result = model.fillResults.first(where: { $0.proposalID == proposal.id }) {
+                            Label(result.message, systemImage: result.succeeded ? "checkmark.circle" : "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(result.succeeded ? .secondary : .orange)
+                        }
                     }.padding(.vertical, 4)
                 }
+                Button("Fill verified routine fields") { Task { await model.fillSafeProposals() } }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.isFilling)
             }
             Spacer()
-            Text("Review only: this stage does not write to the webpage or submit anything.").font(.caption).foregroundStyle(.secondary)
+            Text("CareerPilot rechecks the target, preserves newly entered values, dispatches normal form events, and verifies every attempted write by readback. Submission remains manual.")
+                .font(.caption).foregroundStyle(.secondary)
         }.padding(12)
     }
 
@@ -229,11 +370,11 @@ struct ApplicationWorkspaceView: View {
                 Button(action: model.reload) { Image(systemName: "arrow.clockwise") }.disabled(model.currentURL == nil).help("Reload")
                 TextField("Employer application URL", text: $model.address).textFieldStyle(.roundedBorder).onSubmit(model.openAddress)
                 Button("Open", action: model.openAddress).keyboardShortcut(.return, modifiers: [.command])
-                Button("Inspect form") { Task { await model.inspectPage() } }.disabled(model.currentURL == nil || model.isLoading || model.isInspecting)
-                if model.isLoading || model.isInspecting { ProgressView().controlSize(.small) }
+                Button("Inspect form") { Task { await model.inspectPage() } }.disabled(model.currentURL == nil || model.isLoading || model.isInspecting || model.isFilling)
+                if model.isLoading || model.isInspecting || model.isFilling { ProgressView().controlSize(.small) }
             }
             HStack {
-                Label("Employer webpages are untrusted. Inspection is read-only and CareerPilot never submits automatically.", systemImage: "lock.shield").font(.caption).foregroundStyle(.secondary); Spacer()
+                Label("Employer webpages are untrusted. CareerPilot fills only verified routine facts and never submits automatically.", systemImage: "lock.shield").font(.caption).foregroundStyle(.secondary); Spacer()
             }
             if let errorMessage = model.errorMessage {
                 HStack { Label(errorMessage, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.red); Spacer(); Button("Dismiss") { model.errorMessage = nil }.buttonStyle(.link) }
