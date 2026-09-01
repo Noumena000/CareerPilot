@@ -31,8 +31,8 @@ jobs:
         run: python3 -m json.tool SafariExtension/Resources/manifest.json >/dev/null
       - name: Enforce submission boundary
         run: |
-          if grep -R -n -E '\.submit\(|requestSubmit\(' SafariExtension; then
-            echo "Submission APIs are forbidden in the Safari extension."
+          if git grep -n -E '\.submit\(|requestSubmit\(' -- App Sources SafariExtension; then
+            echo "Programmatic form submission APIs are forbidden in CareerPilot runtime code."
             exit 1
           fi
 
