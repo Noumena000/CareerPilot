@@ -45,8 +45,7 @@ public enum CareerFieldMatcher {
         "address-level1": .state,
         "country": .country,
         "country-name": .country,
-        "postal-code": .postalCode,
-        "url": .websiteURL
+        "postal-code": .postalCode
     ]
 
     private static let aliases: [CanonicalCareerField: [String]] = [
@@ -60,9 +59,9 @@ public enum CareerFieldMatcher {
         .state: ["state", "province", "region", "state province"],
         .country: ["country", "country name"],
         .postalCode: ["postal code", "postalcode", "zip", "zip code", "zipcode"],
-        .linkedInURL: ["linkedin", "linkedin url", "linkedin profile", "linkedinprofile"],
-        .portfolioURL: ["portfolio", "portfolio url", "portfolio website", "portfolio site"],
-        .websiteURL: ["website", "website url", "personal website", "personal site", "homepage"]
+        .linkedInURL: ["linkedin", "linkedin url", "linkedin profile", "linkedin profile url", "linkedinprofile"],
+        .portfolioURL: ["portfolio", "portfolio url", "portfolio website", "portfolio website url", "portfolio site"],
+        .websiteURL: ["website", "website url", "personal website", "personal website url", "personal site", "homepage"]
     ]
 
     public static func match(
