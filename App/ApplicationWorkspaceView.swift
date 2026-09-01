@@ -43,9 +43,8 @@ final class ApplicationBrowserModel: ObservableObject {
         if let url = webView.url {
             address = url.absoluteString
         }
-        pageTitle = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            ? webView.title!
-            : "Application workspace"
+        let title = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        pageTitle = title.isEmpty ? "Application workspace" : title
         isLoading = webView.isLoading
         canGoBack = webView.canGoBack
         canGoForward = webView.canGoForward
@@ -68,7 +67,6 @@ struct ApplicationWebView: NSViewRepresentable {
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
-        webView.setValue(false, forKey: "drawsBackground")
 
         context.coordinator.observe(webView)
         model.webView = webView
@@ -90,7 +88,6 @@ struct ApplicationWebView: NSViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         private weak var model: ApplicationBrowserModel?
-        private weak var observedWebView: WKWebView?
         private var observations: [NSKeyValueObservation] = []
 
         init(model: ApplicationBrowserModel) {
@@ -98,7 +95,6 @@ struct ApplicationWebView: NSViewRepresentable {
         }
 
         func observe(_ webView: WKWebView) {
-            observedWebView = webView
             observations = [
                 webView.observe(\.url, options: [.new]) { [weak self] webView, _ in
                     Task { @MainActor in self?.model?.synchronize(from: webView) }
@@ -120,7 +116,6 @@ struct ApplicationWebView: NSViewRepresentable {
 
         func stopObserving() {
             observations.removeAll()
-            observedWebView = nil
         }
 
         func webView(
