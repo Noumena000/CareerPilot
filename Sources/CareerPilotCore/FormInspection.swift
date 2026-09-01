@@ -23,7 +23,9 @@ public struct InspectedBrowserField: Codable, Equatable, Sendable {
 }
 
 public struct RoutineFillProposal: Identifiable, Codable, Equatable, Sendable {
-    public let id: UUID
+    public typealias ID = UUID
+
+    public let id: ID
     public let inspectedField: InspectedBrowserField
     public let canonicalField: CanonicalCareerField
     public let proposedValue: String
@@ -31,7 +33,7 @@ public struct RoutineFillProposal: Identifiable, Codable, Equatable, Sendable {
     public let evidence: String
 
     public init(
-        id: UUID = UUID(),
+        id: ID = UUID(),
         inspectedField: InspectedBrowserField,
         canonicalField: CanonicalCareerField,
         proposedValue: String,
