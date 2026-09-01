@@ -53,7 +53,7 @@ public enum RoutineFillPlanner {
         profile: CareerProfile,
         pageURL: URL?
     ) -> [RoutineFillProposal] {
-        guard ApplicationURLPolicy.permitsAutomaticCareerFactDisclosure(to: pageURL) else { return [] }
+        guard ApplicationURLPolicy.permitsAutomaticDisclosure(to: pageURL) else { return [] }
 
         return fields.compactMap { field in
             guard !field.isDisabled,
