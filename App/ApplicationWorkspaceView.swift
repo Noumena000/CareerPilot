@@ -340,7 +340,7 @@ struct ApplicationWorkspaceView: View {
             if model.proposals.isEmpty {
                 Text("No empty routine fields matched verified CareerFacts. Existing values and sensitive questions are left alone.").font(.callout).foregroundStyle(.secondary)
             } else {
-                List(model.proposals) { proposal in
+                List(Array(model.proposals.enumerated()), id: \.offset) { _, proposal in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(proposal.inspectedField.descriptor.label.isEmpty ? proposal.canonicalField.rawValue : proposal.inspectedField.descriptor.label).font(.callout).bold()
                         Text(proposal.proposedValue).textSelection(.enabled)
