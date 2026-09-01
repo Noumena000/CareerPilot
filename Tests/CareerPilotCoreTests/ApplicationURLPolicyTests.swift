@@ -19,7 +19,13 @@ final class ApplicationURLPolicyTests: XCTestCase {
             XCTAssertEqual(error as? ApplicationURLPolicyError, .unsupportedScheme("file"))
         }
 
-        XCTAssertThrowsError(try ApplicationURLPolicy.resolve("javascript:alert(1)"))
+        XCTAssertThrowsError(try ApplicationURLPolicy.resolve("javascript:alert(1)")) { error in
+            XCTAssertEqual(error as? ApplicationURLPolicyError, .unsupportedScheme("javascript"))
+        }
+
+        XCTAssertThrowsError(try ApplicationURLPolicy.resolve("mailto:test@example.com")) { error in
+            XCTAssertEqual(error as? ApplicationURLPolicyError, .unsupportedScheme("mailto"))
+        }
     }
 
     func testNavigationPolicyAllowsOnlyWebAndAboutPages() {
