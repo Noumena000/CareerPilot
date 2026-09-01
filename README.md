@@ -1,50 +1,51 @@
 # CareerPilot
 
-CareerPilot is a privacy-first, local-first macOS job-application assistant focused on reducing repetitive application work while keeping consequential decisions under user control.
+CareerPilot is a local-first macOS workspace for a focused, accountable job search.
 
-## Current direction
+The product is designed to help a candidate discover useful roles, rank actual fit, choose the right résumé, prepare truthful applications, review proposed form entries, and track outcomes. CareerPilot never submits an application without the candidate's direct action.
 
-The macOS app is the primary product. It owns CareerFacts, résumé references, approvals, audit history, application tracking, and the employer application workspace. Safari remains optional compatibility/capture functionality rather than a runtime prerequisite.
+## Product principles
 
-The target application flow is:
+- **macOS workspace first:** job discovery, candidate facts, applications, approvals, and tracking belong in the app.
+- **Truthful automation:** CareerPilot must not invent experience, credentials, availability, compensation requirements, or legal attestations.
+- **Private by default:** résumés, profiles, application answers, and browsing data stay local unless the user explicitly authorizes a destination.
+- **Review before submission:** safe routine fields may be filled from confirmed facts; sensitive or uncertain questions remain for the user.
+- **Manual submission:** final application submission is always a direct user action.
+- **Attention efficient:** success is measured by qualified applications per minute of user attention, then by conversations and interviews.
 
-1. Confirm local CareerFacts.
-2. Review a qualified job and choose a résumé.
-3. Open the employer's real application in CareerPilot's app-owned `WKWebView`.
-4. Inspect form controls and deterministically match safe routine fields to verified CareerFacts.
-5. Propose or perform approved routine writes and verify them by readback.
-6. Surface sensitive, ambiguous, legal, CAPTCHA, authentication, and unsupported fields for user action.
-7. Attach only the explicitly selected résumé through native WebKit file handling.
-8. Leave final submission to the user.
+## Target architecture
 
-## Safety boundaries
+```text
+CareerPilot macOS app
+  -> local CareerFacts and résumé library
+  -> job discovery and Job Inbox
+  -> eligibility, relevance, and qualification ranking
+  -> résumé selection
+  -> employer application in an app-owned WKWebView
+  -> deterministic routine form matching/filling and native résumé attachment
+  -> Needs Your Answer review
+  -> user review and manual submission
+  -> local application tracking
+```
 
-- CareerPilot never fabricates candidate facts, credentials, experience, dates, skills, or accomplishments.
-- Only verified CareerFacts may support automatic routine-field filling.
-- Employer webpages and job descriptions are untrusted data, not privileged instructions.
-- Sensitive questions, passwords, identity numbers, CAPTCHA, authentication, signatures, and final submission remain outside automatic execution.
-- Browser navigation is restricted to ordinary HTTP/HTTPS application pages (plus internal `about:` pages used by WebKit); local file and custom-scheme navigation are blocked inside the application workspace.
-- Real candidate PII and secrets must not be committed to Git.
-- Cloud processing is optional and requires explicit authorization before career/application data is sent externally.
+The Safari extension remains an optional capture surface during the transition. It is not required for the core application.
 
-## Repository layout
+## Current status
 
-- `App/` — macOS SwiftUI app, local CareerFacts editor, application workspace, privacy/settings UI.
-- `Sources/CareerPilotCore/` — reusable domain contracts, workflow policy, CareerFacts, URL safety, and deterministic field matching.
-- `SafariExtension/` — optional Safari compatibility/capture extension.
-- `Tests/CareerPilotCoreTests/` — policy and domain regression tests.
-- `docs/` — architecture, security, roadmap, and implementation notes.
-- `agents/` — focused repository-native engineering guides.
+The repository now contains:
 
-## Verification
+- the native macOS app shell and optional Safari capture bridge
+- shared workflow and field-safety contracts
+- local CareerFacts with explicit verification state and local persistence
+- deterministic matching from browser field metadata to verified routine CareerFacts
+- an app-owned `WKWebView` application workspace with HTTP/HTTPS-only navigation policy, address entry, back/forward/reload controls, and load/error state
 
-The repository's GitHub Actions workflow runs:
+The next implementation milestone is universal in-page form inspection and safe routine filling with write readback verification. Résumé attachment, Needs Your Answer, job ranking/discovery, and application tracking follow after that supervised autofill loop is reliable.
 
-- `swift test`
-- Safari extension JavaScript/manifest checks
-- stop-before-submit and external-runtime-independence guards
-- XcodeGen project generation
-- unsigned macOS Xcode compilation
-- embedded Safari extension validation
+See `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, and `docs/ROADMAP.md` for the current boundaries and milestones.
 
-A green build does not by itself prove behavior on real employer sites. Live WebKit/form behavior must be verified separately where automation cannot exercise it directly.
+## Safety boundary
+
+CareerPilot may research, summarize, rank, draft, and fill high-confidence routine fields from explicitly known facts. It must stop for passwords, CAPTCHAs, demographic and disability questions, work-authorization attestations, criminal-history disclosures, salary commitments, signatures, identity information, unsupported questions, and final submission.
+
+Employer webpages are untrusted input. The application workspace blocks local-file and custom-scheme navigation and does not grant webpage content authority over CareerPilot policy.
