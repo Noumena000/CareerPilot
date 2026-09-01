@@ -19,6 +19,7 @@ final class CareerFactsViewModel: ObservableObject {
     @Published var isSaving = false
 
     private let store: any CareerFactsStore
+    private var loadedProfile = CareerProfile()
 
     init(store: (any CareerFactsStore)? = nil) {
         self.store = store ?? JSONCareerFactsStore(fileURL: Self.defaultStoreURL())
@@ -27,6 +28,7 @@ final class CareerFactsViewModel: ObservableObject {
     func load() async {
         do {
             let profile = try await store.load()
+            loadedProfile = profile
             firstName = profile.fact(for: .firstName)?.value ?? ""
             lastName = profile.fact(for: .lastName)?.value ?? ""
             preferredName = profile.fact(for: .preferredName)?.value ?? ""
@@ -49,41 +51,29 @@ final class CareerFactsViewModel: ObservableObject {
         isSaving = true
         defer { isSaving = false }
 
-        var profile = CareerProfile()
-        addVerifiedFact(.firstName, value: firstName, to: &profile)
-        addVerifiedFact(.lastName, value: lastName, to: &profile)
-        addVerifiedFact(.preferredName, value: preferredName, to: &profile)
-        addVerifiedFact(.email, value: email, to: &profile)
-        addVerifiedFact(.phone, value: phone, to: &profile)
-        addVerifiedFact(.city, value: city, to: &profile)
-        addVerifiedFact(.state, value: state, to: &profile)
-        addVerifiedFact(.country, value: country, to: &profile)
-        addVerifiedFact(.postalCode, value: postalCode, to: &profile)
-        addVerifiedFact(.linkedInURL, value: linkedInURL, to: &profile)
-        addVerifiedFact(.portfolioURL, value: portfolioURL, to: &profile)
-        addVerifiedFact(.websiteURL, value: websiteURL, to: &profile)
+        let edits: [CanonicalCareerField: String] = [
+            .firstName: firstName,
+            .lastName: lastName,
+            .preferredName: preferredName,
+            .email: email,
+            .phone: phone,
+            .city: city,
+            .state: state,
+            .country: country,
+            .postalCode: postalCode,
+            .linkedInURL: linkedInURL,
+            .portfolioURL: portfolioURL,
+            .websiteURL: websiteURL
+        ]
+        let profile = loadedProfile.applyingUserEdits(edits)
 
         do {
             try await store.save(profile)
-            statusMessage = "Saved locally. These facts are now verified for routine autofill."
+            loadedProfile = profile
+            statusMessage = "Saved locally. New or changed values you entered are verified; unchanged imported facts keep their prior verification status."
         } catch {
             statusMessage = "Could not save CareerFacts: \(error.localizedDescription)"
         }
-    }
-
-    private func addVerifiedFact(
-        _ field: CanonicalCareerField,
-        value: String,
-        to profile: inout CareerProfile
-    ) {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        profile.setFact(
-            field,
-            value: trimmed,
-            source: .userEntered,
-            verification: .verified
-        )
     }
 
     private static func defaultStoreURL() -> URL {
@@ -101,7 +91,7 @@ struct CareerFactsView: View {
     var body: some View {
         Form {
             Section {
-                Text("CareerFacts are the confirmed routine facts CareerPilot may use for deterministic autofill. Saving this page verifies the non-empty values you entered. Sensitive application questions remain manual.")
+                Text("CareerFacts are the confirmed routine facts CareerPilot may use for deterministic autofill. New or changed values you save here are treated as user-confirmed. Imported values that you leave unchanged keep their existing verification state. Sensitive application questions remain manual.")
                     .foregroundStyle(.secondary)
             }
 
@@ -131,7 +121,7 @@ struct CareerFactsView: View {
 
             Section {
                 HStack {
-                    Button("Save & Verify") {
+                    Button("Save & Verify Changes") {
                         Task { await model.saveAndVerify() }
                     }
                     .keyboardShortcut("s", modifiers: [.command])
