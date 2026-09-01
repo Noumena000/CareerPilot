@@ -36,6 +36,13 @@ final class ApplicationURLPolicyTests: XCTestCase {
         XCTAssertFalse(ApplicationURLPolicy.permitsNavigation(to: URL(string: "mailto:test@example.com")))
     }
 
+    func testAutomaticDisclosureRequiresHTTPS() {
+        XCTAssertTrue(ApplicationURLPolicy.permitsAutomaticDisclosure(to: URL(string: "https://jobs.example.com/apply")))
+        XCTAssertFalse(ApplicationURLPolicy.permitsAutomaticDisclosure(to: URL(string: "http://jobs.example.com/apply")))
+        XCTAssertFalse(ApplicationURLPolicy.permitsAutomaticDisclosure(to: URL(string: "about:blank")))
+        XCTAssertFalse(ApplicationURLPolicy.permitsAutomaticDisclosure(to: URL(string: "file:///tmp/test")))
+    }
+
     func testEmptyAndMalformedValuesFailClosed() {
         XCTAssertThrowsError(try ApplicationURLPolicy.resolve("   ")) { error in
             XCTAssertEqual(error as? ApplicationURLPolicyError, .empty)
