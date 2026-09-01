@@ -4,6 +4,7 @@ import CareerPilotCore
 private enum SidebarItem: String, Hashable {
     case pipeline
     case profile
+    case apply
     case drafts
     case answers
     case settings
@@ -30,6 +31,9 @@ struct ContentView: View {
                 NavigationLink(value: SidebarItem.profile) {
                     Label("CareerFacts", systemImage: "person.text.rectangle")
                 }
+                NavigationLink(value: SidebarItem.apply) {
+                    Label("Application workspace", systemImage: "safari")
+                }
                 NavigationLink(value: SidebarItem.drafts) {
                     Label("Application drafts", systemImage: "doc.text")
                 }
@@ -47,6 +51,8 @@ struct ContentView: View {
                 PrivacySettingsView()
             case .profile:
                 CareerFactsView()
+            case .apply:
+                ApplicationWorkspaceView()
             case .pipeline:
                 workflowView
             case .drafts:
