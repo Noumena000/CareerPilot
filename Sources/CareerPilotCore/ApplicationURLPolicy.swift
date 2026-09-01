@@ -25,22 +25,21 @@ public enum ApplicationURLPolicy {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw ApplicationURLPolicyError.empty }
 
-        let candidate: String
-        if trimmed.contains("://") {
-            candidate = trimmed
-        } else {
-            candidate = "https://\(trimmed)"
+        let explicitScheme = detectedScheme(in: trimmed)
+        if let explicitScheme,
+           explicitScheme != "https",
+           explicitScheme != "http" {
+            throw ApplicationURLPolicyError.unsupportedScheme(explicitScheme)
         }
+
+        let candidate = explicitScheme == nil ? "https://\(trimmed)" : trimmed
 
         guard let url = URL(string: candidate),
               let scheme = url.scheme?.lowercased(),
+              scheme == "https" || scheme == "http",
               let host = url.host,
               !host.isEmpty else {
             throw ApplicationURLPolicyError.invalid
-        }
-
-        guard scheme == "https" || scheme == "http" else {
-            throw ApplicationURLPolicyError.unsupportedScheme(url.scheme)
         }
 
         return url
@@ -49,5 +48,16 @@ public enum ApplicationURLPolicy {
     public static func permitsNavigation(to url: URL?) -> Bool {
         guard let scheme = url?.scheme?.lowercased() else { return false }
         return scheme == "https" || scheme == "http" || scheme == "about"
+    }
+
+    private static func detectedScheme(in value: String) -> String? {
+        guard let colonIndex = value.firstIndex(of: ":") else { return nil }
+        let candidate = String(value[..<colonIndex])
+        guard !candidate.isEmpty,
+              candidate.first?.isLetter == true,
+              candidate.dropFirst().allSatisfy({ $0.isLetter || $0.isNumber || $0 == "+" || $0 == "-" || $0 == "." }) else {
+            return nil
+        }
+        return candidate.lowercased()
     }
 }
