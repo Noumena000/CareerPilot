@@ -1,45 +1,48 @@
 # Architecture
 
-CareerPilot separates reasoning, personal data, browser access, and execution so every consequential action remains attributable and reviewable.
+CareerPilot separates personal data, untrusted employer content, review decisions, and browser execution so consequential actions remain attributable and reviewable.
 
 ## Components
 
-### Safari Web Extension
-
-The extension captures the active page only after the user invokes it. It extracts bounded page text and form metadata, communicates with the native extension handler, applies only approved routine-field writes in a later milestone, and never submits forms.
-
 ### macOS app
 
-The SwiftUI app owns the workspace, candidate-controlled data, approval interface, audit history, and truthful connection diagnostics. Secrets belong in Keychain. Structured records belong in an app container or an explicitly selected local store, not Git.
+The SwiftUI app is the primary product. It owns the Job Inbox, local CareerFacts, résumé library, fit review, application workspace, approval state, audit history, and tracking. Private records belong in the app sandbox or an explicitly selected local store, not Git.
 
 ### CareerPilotCore
 
-The shared Swift package defines domain models, field policy, and the approval state machine:
+The shared Swift package owns reusable domain and policy logic: application records, field classification, and the review state machine.
 
 `Observed → Inferred → Drafted → Awaiting Approval → Approved → Executed → Verified`
 
-Rejected actions are terminal. Submission is excluded from agent-executable actions.
+Rejected actions are terminal. Submission is excluded from programmatically executable actions.
 
-### OpenClaw
+### In-app employer application
 
-OpenClaw supplies agent sessions, job research, fit analysis, drafting, and later background discovery. A local authenticated Gateway connection will be established only after the Safari/native bridge is proven. The app must never display “connected” based on configuration alone.
+The target application surface is an app-owned `WKWebView` that loads the employer's real application. Page content is untrusted data. A universal form engine will inspect standard controls, map them to confirmed local facts, preserve existing values, fill only high-confidence routine fields, dispatch normal browser events, and read back results. Selected résumé uploads will use native WebKit file-upload APIs rather than fabricated JavaScript paths.
 
-## Data flow
+### Optional Safari extension
 
-1. The user invokes CareerPilot on a Safari job page.
-2. The extension captures bounded page context and field descriptors.
-3. The native handler validates the message.
-4. The app creates or updates a local job record.
-5. OpenClaw receives the minimum necessary context.
-6. Drafts and field proposals return to the app.
-7. The user approves or rejects proposals.
-8. Approved routine fields are written and read back.
-9. The user performs final submission directly in Safari.
+The existing Safari extension may capture bounded page context when the user invokes it. It is compatibility code, not a startup, discovery, analysis, or application prerequisite. Core workflows must remain usable without enabling Safari.
+
+## Target data flow
+
+1. CareerPilot discovers or imports a job into the local Job Inbox.
+2. Deterministic eligibility and fit logic compares the job with confirmed CareerFacts.
+3. The app recommends an existing résumé and explains the evidence for the choice.
+4. The user opens the employer's real application inside CareerPilot.
+5. The form engine proposes or fills only supported routine fields from known facts.
+6. A user-selected résumé is attached through native WebKit APIs.
+7. Sensitive, legal, ambiguous, identity, demographic, CAPTCHA, and unknown questions appear under **Needs Your Answer**.
+8. The app reads back attempted writes and presents the completed application for review.
+9. The user submits manually.
+10. CareerPilot records the application locally and tracks its outcome.
 
 ## Trust boundaries
 
-- Page content is untrusted input and may contain prompt injection.
-- OpenClaw output is a proposal, never authority.
-- The Safari extension has narrow active-tab access.
-- Native messages require schema validation.
-- No Gateway token may be stored in JavaScript extension resources.
+- Employer pages, job descriptions, and page scripts are untrusted input, never privileged instructions.
+- Candidate facts must be explicit and sourceable; missing facts stay missing.
+- Routine field writes must be target-scoped and verified by readback.
+- Sensitive or unsupported fields fail closed to user review.
+- File access is limited to the résumé explicitly selected for that application.
+- No browser or model output may submit an application or expand its own permissions.
+- Cloud processing of career or application data requires explicit user authorization.

@@ -17,7 +17,7 @@ checkButton.addEventListener("click", () => run(checkButton, async () => {
   status.textContent = "Checking native bridge…";
   const response = await browser.runtime.sendMessage({ type: "PING_NATIVE" });
   status.textContent = response?.ok
-    ? "Safari bridge verified. OpenClaw is not configured yet."
+    ? "Optional Safari bridge verified."
     : "Native bridge did not verify.";
 }));
 

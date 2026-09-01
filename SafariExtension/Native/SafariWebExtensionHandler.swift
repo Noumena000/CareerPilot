@@ -24,15 +24,13 @@ final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
         case "PING":
             complete(context, response: [
                 "ok": true,
-                "type": "PONG",
-                "openClaw": "notConfigured"
+                "type": "PONG"
             ])
         case "PAGE_CAPTURE":
             // Page content is intentionally not persisted during the bridge milestone.
             complete(context, response: [
                 "ok": true,
-                "type": "CAPTURE_RECEIVED",
-                "openClaw": "notConfigured"
+                "type": "CAPTURE_RECEIVED"
             ])
         default:
             complete(context, response: [
