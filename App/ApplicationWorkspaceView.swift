@@ -346,9 +346,15 @@ struct ApplicationWorkspaceView: View {
                         Text(proposal.proposedValue).textSelection(.enabled)
                         Text(proposal.evidence).font(.caption).foregroundStyle(.secondary)
                         if let result = model.fillResults.first(where: { $0.proposalID == proposal.id }) {
-                            Label(result.message, systemImage: result.succeeded ? "checkmark.circle" : "exclamationmark.triangle")
-                                .font(.caption)
-                                .foregroundStyle(result.succeeded ? .secondary : .orange)
+                            if result.succeeded {
+                                Label(result.message, systemImage: "checkmark.circle")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Label(result.message, systemImage: "exclamationmark.triangle")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
                         }
                     }.padding(.vertical, 4)
                 }
