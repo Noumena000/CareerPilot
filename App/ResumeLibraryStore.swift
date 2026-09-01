@@ -26,7 +26,10 @@ final class ResumeLibraryStore: ObservableObject {
             guard fileManager.fileExists(atPath: metadataURL.path) else { library = ResumeLibrary(); return }
             let data = try Data(contentsOf: metadataURL)
             library = try JSONDecoder().decode(ResumeLibrary.self, from: data)
-            library.resumes.removeAll { !fileManager.fileExists(atPath: resolvedURL(for: $0).path) }
+            library.resumes.removeAll { record in
+                guard let url = resolvedURL(for: record) else { return true }
+                return !isRegularFile(at: url)
+            }
             if let selected = library.selectedResumeID, !library.resumes.contains(where: { $0.id == selected }) {
                 library.selectedResumeID = library.resumes.first?.id
             }
@@ -50,17 +53,24 @@ final class ResumeLibraryStore: ObservableObject {
     }
 
     func remove(_ id: UUID) {
-        guard let record = library.resumes.first(where: { $0.id == id }) else { return }
-        let url = resolvedURL(for: record)
+        guard let record = library.resumes.first(where: { $0.id == id }),
+              let url = resolvedURL(for: record) else {
+            library.remove(id)
+            persist()
+            return
+        }
         try? fileManager.removeItem(at: url)
         library.remove(id)
         persist()
     }
 
     func selectedResumeURL() -> URL? {
-        guard let record = library.selectedResume else { return nil }
-        let url = resolvedURL(for: record)
-        return fileManager.fileExists(atPath: url.path) ? url : nil
+        guard let record = library.selectedResume,
+              let url = resolvedURL(for: record),
+              isRegularFile(at: url) else {
+            return nil
+        }
+        return url
     }
 
     private func importResume(from sourceURL: URL) {
@@ -77,6 +87,10 @@ final class ResumeLibraryStore: ObservableObject {
             let storedFilename = "\(id.uuidString).\(ext)"
             let destination = resumesDirectory.appendingPathComponent(storedFilename)
             try fileManager.copyItem(at: sourceURL, to: destination)
+            guard isRegularFile(at: destination) else {
+                try? fileManager.removeItem(at: destination)
+                throw ResumeStoreError.notRegularFile
+            }
             try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
             let displayName = sourceURL.deletingPathExtension().lastPathComponent
             library.add(ResumeRecord(id: id, displayName: displayName, storedFilename: storedFilename, originalFilename: sourceURL.lastPathComponent))
@@ -105,7 +119,18 @@ final class ResumeLibraryStore: ObservableObject {
         try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: resumesDirectory.path)
     }
 
-    private func resolvedURL(for record: ResumeRecord) -> URL {
-        resumesDirectory.appendingPathComponent(record.storedFilename, isDirectory: false)
+    private func resolvedURL(for record: ResumeRecord) -> URL? {
+        guard ResumeFilePolicy.isSafeStoredFilename(record.storedFilename, for: record.id) else { return nil }
+        return resumesDirectory.appendingPathComponent(record.storedFilename, isDirectory: false)
+    }
+
+    private func isRegularFile(at url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else { return false }
+        return values.isRegularFile == true && values.isSymbolicLink != true
+    }
+
+    private enum ResumeStoreError: LocalizedError {
+        case notRegularFile
+        var errorDescription: String? { "The selected résumé is not a regular file." }
     }
 }
