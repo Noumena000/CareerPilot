@@ -60,4 +60,16 @@ public enum ResumeFilePolicy {
         let ext = URL(fileURLWithPath: filename).pathExtension.lowercased()
         return allowedExtensions.contains(ext)
     }
+
+    public static func isSafeStoredFilename(_ filename: String, for id: UUID) -> Bool {
+        guard filename == URL(fileURLWithPath: filename).lastPathComponent,
+              !filename.contains("/"),
+              !filename.contains("\\"),
+              isAllowed(filename: filename) else {
+            return false
+        }
+
+        let url = URL(fileURLWithPath: filename)
+        return url.deletingPathExtension().lastPathComponent.lowercased() == id.uuidString.lowercased()
+    }
 }
