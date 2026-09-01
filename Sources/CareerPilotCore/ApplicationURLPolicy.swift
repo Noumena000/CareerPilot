@@ -50,6 +50,10 @@ public enum ApplicationURLPolicy {
         return scheme == "https" || scheme == "http" || scheme == "about"
     }
 
+    public static func permitsAutomaticDisclosure(to url: URL?) -> Bool {
+        url?.scheme?.lowercased() == "https" && !(url?.host?.isEmpty ?? true)
+    }
+
     private static func detectedScheme(in value: String) -> String? {
         guard let colonIndex = value.firstIndex(of: ":") else { return nil }
         let candidate = String(value[..<colonIndex])
