@@ -1,51 +1,49 @@
 # Roadmap
 
-## Milestone 0 — contracts and bridge shell
+The product target is to maximize qualified applications per minute of user attention while preserving truthful answers, review, and manual submission.
 
-- Shared workflow and field-safety contracts
-- Safari extension shell with active-tab capture
-- Native PING and capture acknowledgement
-- Honest OpenClaw “not configured” state
-- Automated Swift, JavaScript, JSON, and privacy checks
+## Milestone 0 — local-first foundation
 
-Exit evidence: continuous checks pass. Live Safari registration and messaging still require signed local verification.
+- Shared application workflow and field-safety contracts
+- Native macOS workspace shell
+- Optional Safari capture bridge with no core-product gating
+- Automated Swift, JavaScript, JSON, privacy, and manual-submit checks
 
-## Milestone 1 — local candidate workspace
+Exit evidence: continuous checks pass and the app builds without any external agent runtime.
 
-- SwiftData records for jobs and applications
-- Keychain-backed secret storage
-- Candidate profile and evidence library
-- Résumé import with local parsing
-- Application pipeline and outcome tracking
+## Milestone 1 — CareerFacts and résumé library
 
-## Milestone 2 — authenticated OpenClaw connection
+- Local candidate profile and evidence store
+- Résumé import and local parsing
+- Explicit provenance for reusable facts and answers
+- Local application records and audit history
 
-- Gateway pairing and scoped client
-- Connection diagnostics and audit events
-- CareerPilot plugin tools with typed schemas
-- Prompt-injection boundary and minimum-context policy
+## Milestone 2 — Job Inbox and qualification
 
-## Milestone 3 — analysis and drafting
+- Useful job discovery and deduplication
+- Eligibility, relevance, and qualification ranking
+- Evidence-based fit explanation and uncertainty
+- Deterministic résumé selection from the local library
 
-- Source-linked job extraction
-- Evidence-based fit analysis
-- Résumé selection and tailoring
-- Cover-letter and question drafting
-- Structured uncertainty and missing-evidence review
+## Milestone 3 — Apply with CareerPilot
 
-## Milestone 4 — approved Safari field writes
+- Employer's real application in an app-owned `WKWebView`
+- Universal control inspection for inputs, textareas, selects, checkboxes, and radios
+- Canonical mapping to confirmed CareerFacts
+- High-confidence routine filling that preserves existing values
+- Browser event dispatch and stale-target detection
+- No automatic submission
 
-- Stable field identity
-- Individual allow-once approvals
-- Sensitive-category blocking
-- Navigation and stale-target detection
+## Milestone 4 — attachment and review
+
+- Native WebKit résumé attachment for the explicitly selected file
+- **Needs Your Answer** queue for sensitive, legal, ambiguous, identity, demographic, CAPTCHA, and unsupported fields
 - Write readback and partial-failure reporting
-- Manual final submission
+- Completed-application review followed by manual user submission
 
-## Milestone 5 — discovery and learning loop
+## Milestone 5 — tracking and learning
 
-- OpenClaw-managed Chromium for public job discovery
-- Search criteria, deduplication, and ranking
-- Follow-up reminders
+- Local application pipeline and follow-up reminders
 - Response and interview metrics
-- Strategy recommendations grounded in outcomes
+- Outcome-based search and ranking improvements
+- Optional Safari capture retained only when it adds user value

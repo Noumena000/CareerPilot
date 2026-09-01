@@ -36,6 +36,14 @@ jobs:
             exit 1
           fi
 
+      - name: Enforce external-runtime independence
+        run: |
+          LEGACY_RUNTIME="$(printf 'open%s' 'claw')"
+          if git grep -n -i "$LEGACY_RUNTIME"; then
+            echo "CareerPilot must not restore the removed external runtime dependency."
+            exit 1
+          fi
+
   xcode:
     name: Generate and compile Xcode project
     runs-on: macos-latest

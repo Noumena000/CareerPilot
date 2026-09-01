@@ -12,11 +12,11 @@ struct ContentView: View {
     @State private var selection: SidebarItem? = .pipeline
 
     private let steps = [
-        "Capture a job from Safari",
-        "Review fit and evidence",
-        "Prepare truthful materials",
-        "Approve individual field proposals",
-        "Verify writes, then submit yourself"
+        "Review qualified jobs in your inbox",
+        "Confirm fit and choose a résumé",
+        "Open the employer's real application",
+        "Review routine field suggestions",
+        "Resolve questions, then submit yourself"
     ]
 
     var body: some View {
@@ -39,13 +39,13 @@ struct ContentView: View {
         } detail: {
             switch selection ?? .pipeline {
             case .settings:
-                OpenClawSettingsView()
+                PrivacySettingsView()
             case .pipeline:
                 workflowView
             case .drafts:
                 emptyView(
                     title: "Application drafts",
-                    message: "Drafts will appear only after you capture a job and approve OpenClaw analysis."
+                    message: "Truthful drafts based on confirmed CareerFacts will appear here as the local workspace is built."
                 )
             case .answers:
                 emptyView(
@@ -61,7 +61,7 @@ struct ContentView: View {
             Text("Your job-search workspace")
                 .font(.largeTitle.bold())
 
-            Text("Use Settings to verify a live, loopback-only OpenClaw Gateway. Safari is not reported as connected until native messaging succeeds.")
+            Text("CareerPilot's core workflow is local to this Mac and does not require an external agent runtime or browser extension.")
                 .foregroundStyle(.secondary)
 
             GroupBox("Review-first workflow") {
