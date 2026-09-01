@@ -13,6 +13,7 @@ final class CareerFieldMatcherTests: XCTestCase {
         profile.setFact(.postalCode, value: "12203", verification: .verified)
         profile.setFact(.linkedInURL, value: "https://www.linkedin.com/in/example", verification: .verified)
         profile.setFact(.portfolioURL, value: "https://portfolio.example", verification: .verified)
+        profile.setFact(.websiteURL, value: "https://example.com", verification: .verified)
         return profile
     }
 
@@ -55,7 +56,7 @@ final class CareerFieldMatcherTests: XCTestCase {
         let linkedIn = BrowserFieldDescriptor(
             reference: "social",
             label: "",
-            ariaLabel: "LinkedIn profile"
+            ariaLabel: "LinkedIn profile URL"
         )
         let postal = BrowserFieldDescriptor(
             reference: "postal",
@@ -76,8 +77,6 @@ final class CareerFieldMatcherTests: XCTestCase {
     }
 
     func testSensitiveFieldNeverProducesCareerFactMatch() {
-        var profile = verifiedProfile()
-        profile.setFact(.websiteURL, value: "https://example.com", verification: .verified)
         let field = BrowserFieldDescriptor(
             reference: "identity",
             label: "Social Security Number",
@@ -85,7 +84,7 @@ final class CareerFieldMatcherTests: XCTestCase {
         )
 
         XCTAssertEqual(FieldPolicy.classify(field), .identity)
-        XCTAssertNil(CareerFieldMatcher.match(field, against: profile))
+        XCTAssertNil(CareerFieldMatcher.match(field, against: verifiedProfile()))
     }
 
     func testNearbyTextAloneIsInsufficientForAutomaticMatch() {
@@ -109,6 +108,31 @@ final class CareerFieldMatcherTests: XCTestCase {
 
     func testAmbiguousGenericControlDoesNotMatch() {
         let field = BrowserFieldDescriptor(reference: "unknown", label: "Contact information")
+
+        XCTAssertNil(CareerFieldMatcher.match(field, against: verifiedProfile()))
+    }
+
+    func testGenericURLAutocompleteDoesNotOverrideSpecificLinkedInLabel() {
+        let field = BrowserFieldDescriptor(
+            reference: "linkedin",
+            label: "LinkedIn profile URL",
+            type: "url",
+            autocomplete: "url"
+        )
+
+        let match = CareerFieldMatcher.match(field, against: verifiedProfile())
+
+        XCTAssertEqual(match?.canonicalField, .linkedInURL)
+        XCTAssertEqual(match?.value, "https://www.linkedin.com/in/example")
+    }
+
+    func testGenericURLFieldWithoutSpecificMeaningDoesNotMatch() {
+        let field = BrowserFieldDescriptor(
+            reference: "url",
+            label: "URL",
+            type: "url",
+            autocomplete: "url"
+        )
 
         XCTAssertNil(CareerFieldMatcher.match(field, against: verifiedProfile()))
     }
