@@ -17,9 +17,13 @@ final class ApplicationBrowserModel: ObservableObject {
     @Published var fillResults: [FillAttemptResult] = []
     @Published var isInspecting = false
     @Published var isFilling = false
+    @Published var selectedResumeName: String?
+    @Published var resumeUploadArmed = false
 
     fileprivate weak var webView: WKWebView?
     fileprivate var pageIdentity: BrowserPageIdentity?
+    private let resumeStore = ResumeLibraryStore()
+    private var eligibleResumeUploadReferences: Set<String> = []
 
     func openAddress() {
         do {
@@ -35,17 +39,65 @@ final class ApplicationBrowserModel: ObservableObject {
     func goForward() { clearInspection(); webView?.goForward() }
     func reload() { clearInspection(); webView?.reload() }
 
+    func refreshSelectedResume() {
+        resumeStore.load()
+        selectedResumeName = resumeStore.library.selectedResume?.displayName
+    }
+
+    func armResumeUpload() {
+        refreshSelectedResume()
+        guard resumeStore.selectedResumeURL() != nil else {
+            errorMessage = "Choose a résumé in the Résumé library before attaching one."
+            resumeUploadArmed = false
+            return
+        }
+        let refs = inspectedFields.compactMap { field -> String? in
+            guard field.descriptor.type.lowercased() == "file" else { return nil }
+            let text = field.descriptor.matchingText
+            return (text.contains("resume") || text.contains("résumé") || text.contains("curriculum vitae") || text.contains(" cv ")) ? field.target.reference : nil
+        }
+        guard !refs.isEmpty else {
+            errorMessage = "CareerPilot did not identify a résumé/CV upload control on this page."
+            resumeUploadArmed = false
+            return
+        }
+        eligibleResumeUploadReferences = Set(refs)
+        resumeUploadArmed = true
+        errorMessage = nil
+    }
+
+    fileprivate func resumeURLForOpenPanel(activeReference: String) -> URL? {
+        guard resumeUploadArmed else {
+            errorMessage = "File selection was blocked. Arm the selected résumé from CareerPilot before using a résumé upload control."
+            return nil
+        }
+        guard eligibleResumeUploadReferences.contains(activeReference) else {
+            resumeUploadArmed = false
+            errorMessage = "CareerPilot blocked the selected résumé from being attached to a different file-upload field."
+            return nil
+        }
+        defer {
+            resumeUploadArmed = false
+            eligibleResumeUploadReferences.removeAll()
+        }
+        refreshSelectedResume()
+        return resumeStore.selectedResumeURL()
+    }
+
     func inspectPage() async {
         guard let webView, let currentURL else { return }
         guard ApplicationURLPolicy.permitsAutomaticDisclosure(to: currentURL) else {
             errorMessage = "CareerPilot only inspects application fields for autofill on secure HTTPS pages."
-            clearInspection(); return
+            clearInspection()
+            return
         }
         isInspecting = true
         defer { isInspecting = false }
         let page = BrowserPageIdentity(url: currentURL.absoluteString)
         pageIdentity = page
         fillResults = []
+        resumeUploadArmed = false
+        eligibleResumeUploadReferences.removeAll()
         do {
             let raw = try await webView.evaluateJavaScript(Self.inspectionScript)
             guard let rows = raw as? [[String: Any]] else { throw InspectionError.invalidResult }
@@ -55,7 +107,10 @@ final class ApplicationBrowserModel: ObservableObject {
                       let name = row["name"] as? String,
                       let type = row["type"] as? String else { return nil }
                 let descriptor = BrowserFieldDescriptor(
-                    reference: reference, label: label, name: name, type: type,
+                    reference: reference,
+                    label: label,
+                    name: name,
+                    type: type,
                     autocomplete: row["autocomplete"] as? String,
                     elementID: row["elementID"] as? String,
                     placeholder: row["placeholder"] as? String,
@@ -73,6 +128,7 @@ final class ApplicationBrowserModel: ObservableObject {
             let profile = try await Self.careerFactsStore().load()
             proposals = RoutineFillPlanner.proposals(for: inspectedFields, profile: profile, pageURL: currentURL)
             reviewQuestions = NeedsYourAnswerPlanner.questions(for: inspectedFields, routineProposals: proposals)
+            refreshSelectedResume()
             errorMessage = nil
         } catch {
             clearInspection()
@@ -101,11 +157,20 @@ final class ApplicationBrowserModel: ObservableObject {
 
     private func executeFill(_ proposal: RoutineFillProposal, in webView: WKWebView) async throws -> FillAttemptResult {
         let descriptor = proposal.inspectedField.descriptor
-        let payload: [String: Any] = ["reference": proposal.inspectedField.target.reference, "expectedName": descriptor.name, "expectedID": descriptor.elementID ?? "", "expectedType": descriptor.type.lowercased(), "value": proposal.proposedValue]
+        let payload: [String: Any] = [
+            "reference": proposal.inspectedField.target.reference,
+            "expectedName": descriptor.name,
+            "expectedID": descriptor.elementID ?? "",
+            "expectedType": descriptor.type.lowercased(),
+            "value": proposal.proposedValue
+        ]
         let data = try JSONSerialization.data(withJSONObject: payload)
         guard let json = String(data: data, encoding: .utf8) else { throw FillError.invalidPayload }
         let raw = try await webView.evaluateJavaScript(Self.fillScript(payloadJSON: json))
-        guard let row = raw as? [String: Any], let statusRaw = row["status"] as? String, let status = FillAttemptStatus(rawValue: statusRaw), let message = row["message"] as? String else { throw FillError.invalidResult }
+        guard let row = raw as? [String: Any],
+              let statusRaw = row["status"] as? String,
+              let status = FillAttemptStatus(rawValue: statusRaw),
+              let message = row["message"] as? String else { throw FillError.invalidResult }
         return FillAttemptResult(proposalID: proposal.id, canonicalField: proposal.canonicalField, status: status, readbackValue: row["readbackValue"] as? String, message: message)
     }
 
@@ -122,17 +187,36 @@ final class ApplicationBrowserModel: ObservableObject {
         canGoForward = webView.canGoForward
     }
 
-    fileprivate func clearInspection() { inspectedFields = []; proposals = []; reviewQuestions = []; fillResults = []; pageIdentity = nil }
+    fileprivate func clearInspection() {
+        inspectedFields = []
+        proposals = []
+        reviewQuestions = []
+        fillResults = []
+        pageIdentity = nil
+        resumeUploadArmed = false
+        eligibleResumeUploadReferences.removeAll()
+    }
 
     private static func careerFactsStore() -> JSONCareerFactsStore {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
         return JSONCareerFactsStore(fileURL: base.appendingPathComponent("CareerPilot", isDirectory: true).appendingPathComponent("career-facts.json"))
     }
 
-    private enum InspectionError: LocalizedError { case invalidResult; var errorDescription: String? { "The page returned an unexpected inspection result." } }
+    private enum InspectionError: LocalizedError {
+        case invalidResult
+        var errorDescription: String? { "The page returned an unexpected inspection result." }
+    }
+
     private enum FillError: LocalizedError {
-        case invalidPayload, invalidResult
-        var errorDescription: String? { self == .invalidPayload ? "CareerPilot could not encode the approved field value." : "The page returned an unexpected fill result." }
+        case invalidPayload
+        case invalidResult
+        var errorDescription: String? {
+            switch self {
+            case .invalidPayload: return "CareerPilot could not encode the approved field value."
+            case .invalidResult: return "The page returned an unexpected fill result."
+            }
+        }
     }
 
     private static let inspectionScript = #"""
@@ -140,12 +224,29 @@ final class ApplicationBrowserModel: ObservableObject {
       const controls = Array.from(document.querySelectorAll('input, textarea, select'));
       const visibleText = (node) => (node && node.textContent ? node.textContent.trim() : '');
       return controls.map((el, index) => {
-        const ref = `cp-${index}`; el.setAttribute('data-careerpilot-ref', ref);
+        const ref = `cp-${index}`;
+        el.setAttribute('data-careerpilot-ref', ref);
         let label = '';
         if (el.labels && el.labels.length) label = Array.from(el.labels).map(visibleText).filter(Boolean).join(' ');
-        if (!label && el.id) { const explicit = document.querySelector(`label[for="${CSS.escape(el.id)}"]`); label = visibleText(explicit); }
+        if (!label && el.id) {
+          const explicit = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+          label = visibleText(explicit);
+        }
         const nearby = visibleText(el.closest('label')) || visibleText(el.parentElement);
-        return { reference: ref, label, name: el.getAttribute('name') || '', type: (el.getAttribute('type') || el.tagName || 'text').toLowerCase(), autocomplete: el.getAttribute('autocomplete') || '', elementID: el.id || '', placeholder: el.getAttribute('placeholder') || '', ariaLabel: el.getAttribute('aria-label') || '', nearbyText: nearby.slice(0, 240), currentValue: typeof el.value === 'string' ? el.value : '', isDisabled: !!el.disabled, isReadOnly: !!el.readOnly };
+        return {
+          reference: ref,
+          label,
+          name: el.getAttribute('name') || '',
+          type: (el.getAttribute('type') || el.tagName || 'text').toLowerCase(),
+          autocomplete: el.getAttribute('autocomplete') || '',
+          elementID: el.id || '',
+          placeholder: el.getAttribute('placeholder') || '',
+          ariaLabel: el.getAttribute('aria-label') || '',
+          nearbyText: nearby.slice(0, 240),
+          currentValue: typeof el.value === 'string' ? el.value : '',
+          isDisabled: !!el.disabled,
+          isReadOnly: !!el.readOnly
+        };
       });
     })();
     """#
@@ -153,29 +254,44 @@ final class ApplicationBrowserModel: ObservableObject {
     private static func fillScript(payloadJSON: String) -> String {
         #"""
         (() => {
-          const p = \#(payloadJSON); const result = (status, message, readbackValue = null) => ({ status, message, readbackValue });
+          const p = \#(payloadJSON);
+          const result = (status, message, readbackValue = null) => ({ status, message, readbackValue });
           const el = document.querySelector(`[data-careerpilot-ref="${CSS.escape(p.reference)}"]`);
           if (!el) return result('targetMissing', 'The inspected control no longer exists.');
-          const actualName = el.getAttribute('name') || ''; const actualID = el.id || ''; const actualType = (el.getAttribute('type') || el.tagName || 'text').toLowerCase();
+          const actualName = el.getAttribute('name') || '';
+          const actualID = el.id || '';
+          const actualType = (el.getAttribute('type') || el.tagName || 'text').toLowerCase();
           if (actualName !== p.expectedName || actualID !== p.expectedID || actualType !== p.expectedType) return result('targetMismatch', 'The control changed after inspection.');
           if (el.disabled || el.readOnly) return result('writeFailed', 'The control became disabled or read-only.');
           if (typeof el.value === 'string' && el.value.trim() !== '') return result('existingValuePreserved', 'A value was entered after inspection, so CareerPilot left it unchanged.', el.value);
-          const tag = el.tagName.toLowerCase(); const allowedInputTypes = new Set(['text', 'email', 'tel', 'url', 'search']);
+          const tag = el.tagName.toLowerCase();
+          const allowedInputTypes = new Set(['text', 'email', 'tel', 'url', 'search']);
           try {
             let desired = p.value;
             if (tag === 'select') {
-              const option = Array.from(el.options).find(o => o.value === desired) || Array.from(el.options).find(o => (o.textContent || '').trim().toLowerCase() === desired.trim().toLowerCase());
-              if (!option) return result('unsupportedControl', 'No select option matched the verified CareerFact.'); desired = option.value; el.value = desired;
+              const option = Array.from(el.options).find(o => o.value === desired)
+                || Array.from(el.options).find(o => (o.textContent || '').trim().toLowerCase() === desired.trim().toLowerCase());
+              if (!option) return result('unsupportedControl', 'No select option matched the verified CareerFact.');
+              desired = option.value;
+              el.value = desired;
             } else if (tag === 'textarea') {
-              const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set; setter ? setter.call(el, desired) : (el.value = desired);
+              const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+              setter ? setter.call(el, desired) : (el.value = desired);
             } else if (tag === 'input' && allowedInputTypes.has(actualType)) {
-              const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set; setter ? setter.call(el, desired) : (el.value = desired);
-            } else return result('unsupportedControl', `CareerPilot does not write this ${actualType} control automatically.`);
-            el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); el.dispatchEvent(new Event('blur', { bubbles: false }));
+              const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+              setter ? setter.call(el, desired) : (el.value = desired);
+            } else {
+              return result('unsupportedControl', `CareerPilot does not write this ${actualType} control automatically.`);
+            }
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            el.dispatchEvent(new Event('blur', { bubbles: false }));
             const readback = typeof el.value === 'string' ? el.value : '';
             if (readback !== desired) return result('readbackFailed', 'The page did not retain the value after the write.', readback);
             return result('verified', 'Value written and verified by readback.', readback);
-          } catch (error) { return result('writeFailed', error && error.message ? error.message : 'The page rejected the write.'); }
+          } catch (error) {
+            return result('writeFailed', error && error.message ? error.message : 'The page rejected the write.');
+          }
         })();
         """#
     }
@@ -183,18 +299,39 @@ final class ApplicationBrowserModel: ObservableObject {
 
 struct ApplicationWebView: NSViewRepresentable {
     @ObservedObject var model: ApplicationBrowserModel
+
     func makeCoordinator() -> Coordinator { Coordinator(model: model) }
+
     func makeNSView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration(); configuration.websiteDataStore = .default(); configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
-        let webView = WKWebView(frame: .zero, configuration: configuration); webView.navigationDelegate = context.coordinator; webView.uiDelegate = context.coordinator; webView.allowsBackForwardNavigationGestures = true
-        context.coordinator.observe(webView); model.webView = webView; model.synchronize(from: webView); return webView
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .default()
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
+        webView.allowsBackForwardNavigationGestures = true
+        context.coordinator.observe(webView)
+        model.webView = webView
+        model.synchronize(from: webView)
+        return webView
     }
-    func updateNSView(_ webView: WKWebView, context: Context) { if model.webView !== webView { model.webView = webView } }
-    static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) { coordinator.stopObserving(); webView.navigationDelegate = nil; webView.uiDelegate = nil }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        if model.webView !== webView { model.webView = webView }
+    }
+
+    static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
+        coordinator.stopObserving()
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+    }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
-        private weak var model: ApplicationBrowserModel?; private var observations: [NSKeyValueObservation] = []
+        private weak var model: ApplicationBrowserModel?
+        private var observations: [NSKeyValueObservation] = []
+
         init(model: ApplicationBrowserModel) { self.model = model }
+
         func observe(_ webView: WKWebView) {
             observations = [
                 webView.observe(\.url, options: [.new]) { [weak self] webView, _ in Task { @MainActor in self?.model?.synchronize(from: webView) } },
@@ -204,70 +341,166 @@ struct ApplicationWebView: NSViewRepresentable {
                 webView.observe(\.canGoForward, options: [.new]) { [weak self] webView, _ in Task { @MainActor in self?.model?.synchronize(from: webView) } }
             ]
         }
+
         func stopObserving() { observations.removeAll() }
+
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            guard ApplicationURLPolicy.permitsNavigation(to: navigationAction.request.url) else { Task { @MainActor in self.model?.errorMessage = "CareerPilot blocked navigation to a non-web URL." }; decisionHandler(.cancel); return }; decisionHandler(.allow)
+            guard ApplicationURLPolicy.permitsNavigation(to: navigationAction.request.url) else {
+                Task { @MainActor in self.model?.errorMessage = "CareerPilot blocked navigation to a non-web URL." }
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
         }
+
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-            guard navigationAction.targetFrame == nil, ApplicationURLPolicy.permitsNavigation(to: navigationAction.request.url) else { return nil }; webView.load(navigationAction.request); return nil
+            guard navigationAction.targetFrame == nil, ApplicationURLPolicy.permitsNavigation(to: navigationAction.request.url) else { return nil }
+            webView.load(navigationAction.request)
+            return nil
         }
-        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) { Task { @MainActor in self.model?.clearInspection() } }
+
+        func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+            Task { @MainActor in
+                let raw = try? await webView.evaluateJavaScript("document.activeElement && document.activeElement.getAttribute('data-careerpilot-ref') || ''")
+                let reference = raw as? String ?? ""
+                guard let url = self.model?.resumeURLForOpenPanel(activeReference: reference) else {
+                    completionHandler(nil)
+                    return
+                }
+                completionHandler([url])
+            }
+        }
+
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            Task { @MainActor in self.model?.clearInspection() }
+        }
+
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { report(error, from: webView) }
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { report(error, from: webView) }
-        private func report(_ error: Error, from webView: WKWebView) { let nsError = error as NSError; guard nsError.code != NSURLErrorCancelled else { return }; Task { @MainActor in self.model?.synchronize(from: webView); self.model?.errorMessage = "Could not load this application page: \(error.localizedDescription)" } }
+
+        private func report(_ error: Error, from webView: WKWebView) {
+            let nsError = error as NSError
+            guard nsError.code != NSURLErrorCancelled else { return }
+            Task { @MainActor in
+                self.model?.synchronize(from: webView)
+                self.model?.errorMessage = "Could not load this application page: \(error.localizedDescription)"
+            }
+        }
     }
 }
 
 struct ApplicationWorkspaceView: View {
     @StateObject private var model = ApplicationBrowserModel()
+
     var body: some View {
         VStack(spacing: 0) {
-            browserToolbar; Divider()
+            browserToolbar
+            Divider()
             if model.currentURL == nil && !model.isLoading {
-                ContentUnavailableView { Label("Open an employer application", systemImage: "safari") } description: { Text("Paste the employer's real application URL above. CareerPilot keeps final submission under your control.") }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                ContentUnavailableView {
+                    Label("Open an employer application", systemImage: "safari")
+                } description: {
+                    Text("Paste the employer's real application URL above. CareerPilot keeps final submission under your control.")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 HSplitView {
                     ApplicationWebView(model: model).frame(minWidth: 520)
-                    if !model.inspectedFields.isEmpty { inspectionPanel.frame(minWidth: 320, idealWidth: 380, maxWidth: 460) }
+                    if !model.inspectedFields.isEmpty {
+                        inspectionPanel.frame(minWidth: 320, idealWidth: 380, maxWidth: 460)
+                    }
                 }
             }
-        }.navigationTitle(model.pageTitle)
+        }
+        .navigationTitle(model.pageTitle)
+        .task { model.refreshSelectedResume() }
     }
 
     private var inspectionPanel: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Safe fill review").font(.headline)
-                Text("\(model.inspectedFields.count) controls inspected · \(model.proposals.count) safe matches · \(model.reviewQuestions.count) need you").font(.caption).foregroundStyle(.secondary)
+                Text("\(model.inspectedFields.count) controls inspected · \(model.proposals.count) safe matches · \(model.reviewQuestions.count) need you")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 if !model.proposals.isEmpty {
-                    Divider(); Text("Verified routine fields").font(.subheadline).bold()
+                    Divider()
+                    Text("Verified routine fields").font(.subheadline).bold()
                     ForEach(Array(model.proposals.enumerated()), id: \.offset) { _, proposal in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(displayLabel(proposal.inspectedField.descriptor)).font(.callout).bold()
                             Text(proposal.proposedValue).textSelection(.enabled)
                             Text(proposal.evidence).font(.caption).foregroundStyle(.secondary)
                             if let result = model.fillResults.first(where: { $0.proposalID == proposal.id }) {
-                                if result.succeeded { Label(result.message, systemImage: "checkmark.circle").font(.caption).foregroundStyle(.secondary) }
-                                else { Label(result.message, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange) }
+                                if result.succeeded {
+                                    Label(result.message, systemImage: "checkmark.circle").font(.caption).foregroundStyle(.secondary)
+                                } else {
+                                    Label(result.message, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+                                }
                             }
-                        }.padding(8).background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        .padding(8)
+                        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
                     }
-                    Button("Fill verified routine fields") { Task { await model.fillSafeProposals() } }.buttonStyle(.borderedProminent).disabled(model.isFilling)
+                    Button("Fill verified routine fields") { Task { await model.fillSafeProposals() } }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.isFilling)
                 }
+
+                if hasResumeUploadField {
+                    Divider()
+                    Label("Résumé attachment", systemImage: "paperclip").font(.subheadline).bold()
+                    if let selectedResumeName = model.selectedResumeName {
+                        Text("Selected: \(selectedResumeName)").font(.callout)
+                        Button(model.resumeUploadArmed ? "Résumé upload armed" : "Arm selected résumé") {
+                            model.armResumeUpload()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(model.resumeUploadArmed)
+                        Text(model.resumeUploadArmed
+                             ? "Now click the résumé/CV upload control on the employer page. CareerPilot will supply only the selected résumé and will block a different file-upload target."
+                             : "CareerPilot never assigns a local file path through JavaScript. Native WebKit supplies the selected sandboxed résumé only after you arm this action.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Choose a résumé in the Résumé library first.").font(.callout).foregroundStyle(.secondary)
+                    }
+                }
+
                 if !model.reviewQuestions.isEmpty {
-                    Divider(); Label("Needs Your Answer", systemImage: "person.crop.circle.badge.questionmark").font(.subheadline).bold()
+                    Divider()
+                    Label("Needs Your Answer", systemImage: "person.crop.circle.badge.questionmark").font(.subheadline).bold()
                     Text("CareerPilot will not guess these answers.").font(.caption).foregroundStyle(.secondary)
                     ForEach(Array(model.reviewQuestions.enumerated()), id: \.offset) { _, question in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(displayLabel(question.inspectedField.descriptor)).font(.callout).bold()
                             Text(reviewReasonLabel(question.reason)).font(.caption).bold()
                             Text(question.explanation).font(.caption).foregroundStyle(.secondary)
-                        }.padding(8).background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        .padding(8)
+                        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
                     }
                 }
-                if model.proposals.isEmpty && model.reviewQuestions.isEmpty { Text("No empty actionable fields were found on this page.").font(.callout).foregroundStyle(.secondary) }
-                Text("Submission remains manual. Sensitive, unknown, unsupported, and judgment-based questions stay under your control.").font(.caption).foregroundStyle(.secondary).padding(.top, 4)
-            }.padding(12)
+
+                if model.proposals.isEmpty && model.reviewQuestions.isEmpty {
+                    Text("No empty actionable fields were found on this page.").font(.callout).foregroundStyle(.secondary)
+                }
+
+                Text("Submission remains manual. Sensitive, unknown, unsupported, and judgment-based questions stay under your control.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+            }
+            .padding(12)
+        }
+    }
+
+    private var hasResumeUploadField: Bool {
+        model.inspectedFields.contains { field in
+            guard field.descriptor.type.lowercased() == "file" else { return false }
+            let text = field.descriptor.matchingText
+            return text.contains("resume") || text.contains("résumé") || text.contains("curriculum vitae") || text.contains(" cv ")
         }
     }
 
@@ -297,11 +530,24 @@ struct ApplicationWorkspaceView: View {
                 Button(action: model.reload) { Image(systemName: "arrow.clockwise") }.disabled(model.currentURL == nil).help("Reload")
                 TextField("Employer application URL", text: $model.address).textFieldStyle(.roundedBorder).onSubmit(model.openAddress)
                 Button("Open", action: model.openAddress).keyboardShortcut(.return, modifiers: [.command])
-                Button("Inspect form") { Task { await model.inspectPage() } }.disabled(model.currentURL == nil || model.isLoading || model.isInspecting)
+                Button("Inspect form") { Task { await model.inspectPage() } }
+                    .disabled(model.currentURL == nil || model.isLoading || model.isInspecting)
                 if model.isLoading || model.isInspecting || model.isFilling { ProgressView().controlSize(.small) }
             }
-            HStack { Label("Employer webpages are untrusted. CareerPilot fills only verified routine facts and never submits automatically.", systemImage: "lock.shield").font(.caption).foregroundStyle(.secondary); Spacer() }
-            if let errorMessage = model.errorMessage { HStack { Label(errorMessage, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.red); Spacer(); Button("Dismiss") { model.errorMessage = nil }.buttonStyle(.link) } }
-        }.padding(12)
+            HStack {
+                Label("Employer webpages are untrusted. CareerPilot fills only verified routine facts, supplies only the explicitly selected résumé, and never submits automatically.", systemImage: "lock.shield")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            if let errorMessage = model.errorMessage {
+                HStack {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.red)
+                    Spacer()
+                    Button("Dismiss") { model.errorMessage = nil }.buttonStyle(.link)
+                }
+            }
+        }
+        .padding(12)
     }
 }
