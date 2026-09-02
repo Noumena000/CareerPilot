@@ -21,8 +21,8 @@ CareerPilot macOS app
   -> job discovery and Job Inbox
   -> eligibility, relevance, and qualification ranking
   -> résumé selection
-  -> employer application in an app-owned web view
-  -> routine form filling and native résumé attachment
+  -> employer application in an app-owned WKWebView
+  -> deterministic routine form matching/filling and native résumé attachment
   -> Needs Your Answer review
   -> user review and manual submission
   -> local application tracking
@@ -32,10 +32,20 @@ The Safari extension remains an optional capture surface during the transition. 
 
 ## Current status
 
-This repository contains the initial native app, shared workflow and field-safety contracts, and an optional Safari capture bridge. Local candidate storage, job ranking, résumé selection, the in-app employer application, form filling, résumé attachment, and tracking remain to be implemented.
+The repository now contains:
+
+- the native macOS app shell and optional Safari capture bridge
+- shared workflow and field-safety contracts
+- local CareerFacts with explicit verification state and local persistence
+- deterministic matching from browser field metadata to verified routine CareerFacts
+- an app-owned `WKWebView` application workspace with HTTP/HTTPS-only navigation policy, address entry, back/forward/reload controls, and load/error state
+
+The next implementation milestone is universal in-page form inspection and safe routine filling with write readback verification. Résumé attachment, Needs Your Answer, job ranking/discovery, and application tracking follow after that supervised autofill loop is reliable.
 
 See `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, and `docs/ROADMAP.md` for the current boundaries and milestones.
 
 ## Safety boundary
 
 CareerPilot may research, summarize, rank, draft, and fill high-confidence routine fields from explicitly known facts. It must stop for passwords, CAPTCHAs, demographic and disability questions, work-authorization attestations, criminal-history disclosures, salary commitments, signatures, identity information, unsupported questions, and final submission.
+
+Employer webpages are untrusted input. The application workspace blocks local-file and custom-scheme navigation and does not grant webpage content authority over CareerPilot policy.

@@ -3,6 +3,9 @@ import CareerPilotCore
 
 private enum SidebarItem: String, Hashable {
     case pipeline
+    case profile
+    case resumes
+    case apply
     case drafts
     case answers
     case settings
@@ -12,6 +15,7 @@ struct ContentView: View {
     @State private var selection: SidebarItem? = .pipeline
 
     private let steps = [
+        "Confirm your CareerFacts",
         "Review qualified jobs in your inbox",
         "Confirm fit and choose a résumé",
         "Open the employer's real application",
@@ -24,6 +28,15 @@ struct ContentView: View {
             List(selection: $selection) {
                 NavigationLink(value: SidebarItem.pipeline) {
                     Label("Job pipeline", systemImage: "briefcase")
+                }
+                NavigationLink(value: SidebarItem.profile) {
+                    Label("CareerFacts", systemImage: "person.text.rectangle")
+                }
+                NavigationLink(value: SidebarItem.resumes) {
+                    Label("Résumé library", systemImage: "doc.text")
+                }
+                NavigationLink(value: SidebarItem.apply) {
+                    Label("Application workspace", systemImage: "safari")
                 }
                 NavigationLink(value: SidebarItem.drafts) {
                     Label("Application drafts", systemImage: "doc.text")
@@ -40,6 +53,12 @@ struct ContentView: View {
             switch selection ?? .pipeline {
             case .settings:
                 PrivacySettingsView()
+            case .profile:
+                CareerFactsView()
+            case .resumes:
+                ResumeLibraryView()
+            case .apply:
+                ApplicationWorkspaceView()
             case .pipeline:
                 workflowView
             case .drafts:

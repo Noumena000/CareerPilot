@@ -31,16 +31,16 @@ jobs:
         run: python3 -m json.tool SafariExtension/Resources/manifest.json >/dev/null
       - name: Enforce submission boundary
         run: |
-          if grep -R -n -E '\.submit\(|requestSubmit\(' SafariExtension; then
-            echo "Submission APIs are forbidden in the Safari extension."
+          if git grep -n -E '\.submit\(|requestSubmit\(' -- App Sources SafariExtension; then
+            echo "Programmatic form submission APIs are forbidden in CareerPilot runtime code."
             exit 1
           fi
 
       - name: Enforce external-runtime independence
         run: |
           LEGACY_RUNTIME="$(printf 'open%s' 'claw')"
-          if git grep -n -i "$LEGACY_RUNTIME"; then
-            echo "CareerPilot must not restore the removed external runtime dependency."
+          if git grep -n -i "$LEGACY_RUNTIME" -- App Sources SafariExtension Package.swift project.yml; then
+            echo "CareerPilot runtime code must not restore the removed external runtime dependency."
             exit 1
           fi
 

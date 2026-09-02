@@ -30,7 +30,21 @@ The ignore rules provide a backstop, not a guarantee. Review every change before
 
 Passwords, authentication, identity numbers, demographic and veteran status, disability information, work authorization and sponsorship, criminal history, compensation commitments, signatures, attestations, CAPTCHAs, ambiguous questions, unsupported questions, and final submission remain with the user.
 
-Generic file inputs remain blocked. A later résumé-attachment flow may provide only the résumé explicitly selected by the user to a verified employer upload control through native WebKit APIs; it must never expose an arbitrary local path to page JavaScript.
+## Résumé handling
+
+- Résumés are imported only through an explicit user file-selection action.
+- Supported résumé formats are limited to PDF, DOC, and DOCX.
+- Imported files are copied into CareerPilot's private Application Support container and stored with restrictive permissions.
+- Stored résumé filenames are generated from CareerPilot-owned UUIDs; decoded metadata is validated before resolving a path so tampered metadata cannot traverse outside the résumé library.
+- Only regular, non-symlink files are accepted as stored résumé files.
+- Generic file inputs remain blocked from automatic attachment.
+- CareerPilot may provide only the résumé explicitly selected by the user to an inspected résumé/CV upload control through native WebKit APIs.
+- Résumé attachment must be armed explicitly by the user and is one-shot.
+- CareerPilot never assigns or exposes an arbitrary local filesystem path through page JavaScript.
+
+## Browser trust boundary
+
+The in-app application page is untrusted. DOM inspection may observe field metadata and current values, and safe routine filling may modify only inspected, eligible controls. A target must still match the inspected page/control identity immediately before a write. HTTPS is required before CareerFacts or a selected résumé may be disclosed automatically.
 
 ## Optional browser integration
 

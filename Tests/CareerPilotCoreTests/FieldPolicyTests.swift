@@ -34,4 +34,25 @@ final class FieldPolicyTests: XCTestCase {
             XCTAssertFalse(FieldPolicy.canProgrammaticallyWrite(proposal))
         }
     }
+
+    func testSensitiveClassificationUsesAriaPlaceholderAndNearbyText() {
+        XCTAssertEqual(
+            FieldPolicy.classify(
+                BrowserFieldDescriptor(reference: "a", label: "", ariaLabel: "Disability status")
+            ),
+            .disability
+        )
+        XCTAssertEqual(
+            FieldPolicy.classify(
+                BrowserFieldDescriptor(reference: "b", label: "", placeholder: "SSN")
+            ),
+            .identity
+        )
+        XCTAssertEqual(
+            FieldPolicy.classify(
+                BrowserFieldDescriptor(reference: "c", label: "", nearbyText: "Desired salary")
+            ),
+            .compensation
+        )
+    }
 }
