@@ -8,6 +8,7 @@ private enum SidebarItem: String, Hashable {
     case apply
     case drafts
     case answers
+    case chat
     case settings
 }
 
@@ -44,6 +45,9 @@ struct ContentView: View {
                 NavigationLink(value: SidebarItem.answers) {
                     Label("Answer library", systemImage: "text.book.closed")
                 }
+                NavigationLink(value: SidebarItem.chat) {
+                    Label("CareerPilot chat", systemImage: "text.bubble")
+                }
                 NavigationLink(value: SidebarItem.settings) {
                     Label("Settings", systemImage: "gearshape")
                 }
@@ -71,6 +75,8 @@ struct ContentView: View {
                     title: "Answer library",
                     message: "Reusable answers will remain local and require your confirmation before use."
                 )
+            case .chat:
+                CareerPilotChatView()
             }
         }
     }

@@ -27,5 +27,20 @@ browser.runtime.onMessage.addListener(async (message) => {
     return { capture, native };
   }
 
+  if (message?.type === "ASK_ACTIVE_PAGE") {
+    const tab = await activeTab();
+    await browser.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["content.js"]
+    });
+    const capture = await browser.tabs.sendMessage(tab.id, { type: "CAPTURE_PAGE" });
+    const native = await browser.runtime.sendNativeMessage(NATIVE_APP_ID, {
+      type: "CHAT_REQUEST",
+      prompt: message.prompt,
+      capture
+    });
+    return { capture, native };
+  }
+
   throw new Error("Unsupported CareerPilot message.");
 });

@@ -29,6 +29,36 @@ h1 {
   gap: 8px;
   margin: 18px 0;
 }
+label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 14px 0 6px;
+}
+textarea {
+  background: Canvas;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: CanvasText;
+  font: inherit;
+  padding: 8px;
+  resize: vertical;
+  width: 100%;
+}
+.answer {
+  background: color-mix(in srgb, #2f6fed 12%, transparent);
+  border-radius: 8px;
+  line-height: 1.4;
+  margin-top: 12px;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+.context-note {
+  color: color-mix(in srgb, CanvasText 60%, transparent);
+  font-size: 11px;
+  line-height: 1.35;
+}
 button {
   background: #2f6fed;
   border: 0;
